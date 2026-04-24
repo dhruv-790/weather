@@ -1,4 +1,4 @@
-export const WAQI_TOKEN = process.env.WAQI_API_KEY || '';
+export const WAQI_TOKEN = process.env.NEXT_PUBLIC_WAQI_API_KEY || '';
 export const WAQI_BASE_URL = 'https://api.waqi.info';
 
 // Simple in-memory cache for API responses
