@@ -95,7 +95,18 @@ export function estimateAqiHistoryFromForecast(params: {
   const o3 = daily?.o3;
 
   const available = pm25?.length || pm10?.length || o3?.length ? true : false;
-  if (!available) return [];
+
+  // If we don't have enough forecast pollutant arrays from WAQI, still return a
+  // minimal synthetic history so the dashboard's "Predict next 24h" UI renders.
+  // We anchor the forecast to `nowAqi` and keep it flat.
+  if (!available) {
+    const now = Date.now();
+    return [
+      { t: now - 3600000, aqi: Math.max(0, Math.round(nowAqi)) },
+      { t: now, aqi: Math.max(0, Math.round(nowAqi)) },
+    ];
+  }
+
 
   // Create up to N points from the last available segment of forecast.
   const len = Math.max(pm25?.length ?? 0, pm10?.length ?? 0, o3?.length ?? 0);
