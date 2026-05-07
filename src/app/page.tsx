@@ -6,9 +6,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { getAqiCategory, calculateUSEPAAqi } from "@/lib/waqi";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { RefreshCcw, Clock, Thermometer, Droplets, Wind, Gauge, Activity, Download, SearchX, Zap } from "lucide-react";
+import { RefreshCcw, Clock, Thermometer, Droplets, Wind, Gauge, Activity, Download, SearchX, Zap, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateAqiReport } from "@/lib/pdf-generator";
+import {
+  estimateAqiHistoryFromForecast,
+  predictNext24hAqiFromHistory,
+} from "@/lib/aqi-prediction";
+
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from "recharts";
+
+
 
 export default function Dashboard() {
   const { data, loading, refresh, notFound, city } = useAqi();
@@ -25,6 +41,25 @@ export default function Dashboard() {
     const progress = Math.min(val / max, 1);
     return circumference - progress * circumference;
   };
+
+  const prediction = useMemo(() => {
+    if (!data || usEpaAqi == null) return null;
+
+    const history = estimateAqiHistoryFromForecast({
+      nowAqi: usEpaAqi,
+      forecast: data.forecast,
+      historyPoints: 7,
+    });
+
+    if (history.length < 2) return null;
+
+    return predictNext24hAqiFromHistory(history);
+  }, [data, usEpaAqi]);
+
+  const forecastCategory = useMemo(() => {
+    if (!prediction) return null;
+    return getAqiCategory(prediction.predicted24h);
+  }, [prediction]);
 
   if (loading) {
     return (
@@ -97,7 +132,63 @@ export default function Dashboard() {
       </header>
 
       <div className="grid gap-8 lg:grid-cols-2">
+        {/* AQI Forecast (Next 24h) */}
+        <Card className="border-none shadow-md bg-white dark:bg-card/40 p-6 lg:col-span-2">
+          <CardHeader className="p-0 mb-4">
+            <CardTitle className="text-xl font-black tracking-tight flex items-center gap-3">
+              <TrendingUp className="h-5 w-5 text-primary" /> AQI Forecast (Next 24h)
+            </CardTitle>
+            <CardDescription className="text-muted-foreground">Linear regression projection anchored to forecast trends</CardDescription>
+          </CardHeader>
+
+          <div className="grid gap-6 md:grid-cols-[200px_1fr] items-center">
+            <div className="flex flex-col gap-2">
+              <div className="text-4xl font-black tracking-tighter" style={{ color: forecastCategory?.color || 'inherit' }}>
+                {prediction?.predicted24h ?? '--'}
+              </div>
+              <div className="text-sm font-black" style={{ color: forecastCategory?.color || 'inherit' }}>
+                {forecastCategory?.label ?? ''}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Predicted peak AQI at end of 24h window
+              </div>
+            </div>
+
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={prediction?.series ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--muted))" />
+                  <XAxis
+                    dataKey="offsetHours"
+                    tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={[0, 24]}
+                    type="number"
+                    ticks={[0, 6, 12, 18, 24]}
+                    tickFormatter={(v) => `${v}h`}
+                  />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    formatter={(value: any) => [`${value} AQI`, 'AQI']}
+                    labelFormatter={(label: any) => `T+${label}h`}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="predictedAqi"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={3}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </Card>
+
         {/* US EPA Card */}
+
         <Card className="flex flex-col items-center justify-center p-8 border-none shadow-md bg-white dark:bg-card/40 relative">
           <CardHeader className="text-center p-0 mb-6">
             <CardTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">US AQI (EPA Scale - WAQI)</CardTitle>
